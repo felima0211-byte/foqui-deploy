@@ -48,7 +48,7 @@ input[type='checkbox'] { width: 24px; height: 24px; min-height: 0; accent-color:
 
 nav.sub-nav { display: flex; gap: 6px; margin-bottom: 18px; overflow-x: auto; padding-bottom: 2px; }
 nav.sub-nav button { flex: 1 0 auto; min-height: 44px; padding: 10px 16px; border: 2px solid var(--ink); border-radius: 999px; background: transparent; font-weight: 600; cursor: pointer; }
-nav.sub-nav button[aria-selected='true'] { background: var(--pink); color: #1f4d3f; }
+nav.sub-nav button[aria-selected='true'] { background: var(--ink); color: var(--bg); }
 
 .panel { background: var(--card); border: 2px solid var(--ink); border-radius: 18px; padding: 18px; margin-bottom: 16px; }
 .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
