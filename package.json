@@ -1,0 +1,16 @@
+{
+  "name": "foqui-tech",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Painel de produção e lista de compras da Foqui Sanduíches (local, sem dependências).",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "setup": "node --disable-warning=ExperimentalWarning scripts/setup.js",
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
+    "auditar": "node --disable-warning=ExperimentalWarning scripts/auditar.js",
+    "reset": "node --disable-warning=ExperimentalWarning scripts/setup.js --reset"
+  }
+}

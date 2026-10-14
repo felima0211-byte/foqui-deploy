@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Foqui Tech</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="stripes" aria-hidden="true"></div>
+  <div class="wrap">
+    <header>
+      <span id="logo"></span>
+      <div><h1>Foqui Tech</h1><div class="sub">Sanduíches</div></div>
+      <button class="themedot" id="tema" type="button" aria-label="Alternar entre tema claro e escuro" title="Alternar tema"></button>
+    </header>
+
+    <div class="sections" role="tablist" aria-label="Áreas">
+      <button role="tab" id="sec-painel" aria-selected="true">Painel de Produção</button>
+      <button role="tab" id="sec-compras" aria-selected="false">Lista de Compras <span class="badge" id="badge">0</span></button>
+    </div>
+
+    <nav class="sub-nav" id="subnav" role="tablist" aria-label="Seções do painel"></nav>
+    <main id="view"></main>
+  </div>
+  <div id="toast" role="status" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

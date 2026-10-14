@@ -1,0 +1,8 @@
+node_modules/
+data/foqui.db
+data/foqui.db-shm
+data/foqui.db-wal
+*.db
+*.db-shm
+*.db-wal
+.env
