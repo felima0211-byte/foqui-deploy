@@ -588,165 +588,121 @@ async function viewCompras(el) {
 
 // ── Telas Operacionais ────────────────────────────────────────────────────
 
-// Chaves de localStorage para checkboxes operacionais (resetam com nova data)
-function chaveOp(tipo) {
-  return `foqui-op-${tipo}-${new Date().toISOString().slice(0, 10)}`;
-}
-function lerChecks(tipo) {
-  try { return new Set(JSON.parse(localStorage.getItem(chaveOp(tipo)) || '[]')); } catch { return new Set(); }
-}
-function salvarCheck(tipo, id, marcado) {
-  const s = lerChecks(tipo);
-  marcado ? s.add(id) : s.delete(id);
-  try { localStorage.setItem(chaveOp(tipo), JSON.stringify([...s])); } catch { /* ignora */ }
-}
+// ── Painel Operacional ────────────────────────────────────────────────────
 
 async function viewOperacional(alvo) {
-  // Abas internas: Finalização | Produção
-  const subNav = h('nav', { class: 'sub-nav', role: 'tablist' },
-    h('button', { role: 'tab', type: 'button', 'aria-selected': S.opAba === 'finalizacao', onclick: () => { S.opAba = 'finalizacao'; viewOperacional(alvo); } }, '🥪 Finalização'),
-    h('button', { role: 'tab', type: 'button', 'aria-selected': S.opAba === 'producao', onclick: () => { S.opAba = 'producao'; viewOperacional(alvo); } }, '🔪 Produção')
-  );
-
   const corpo = h('div');
-  reset(alvo, subNav, corpo);
-
+  reset(alvo, corpo);
   try {
-    if (S.opAba === 'finalizacao') await viewOpFinalizacao(corpo);
-    else await viewOpProducao(corpo);
+    // Busca vendas e plano em paralelo
+    const [vendas, plano] = await Promise.all([
+      api('GET', '/api/vendas'),
+      api('GET', '/api/plano'),
+    ]);
+
+    // Metas baseadas 100% na média diária do último relatório de vendas
+    let metaMap = new Map();
+    let refTxt = 'sem relatório de vendas';
+    if (vendas.periodo && vendas.linhas.length) {
+      const res = await api('POST', '/api/metas/sugerir', { modo: 'dias', dias: 1, fator: 1, aplicar: false });
+      res.metas.forEach(m => metaMap.set(m.lancheId, m.meta));
+      const p = vendas.periodo;
+      refTxt = `Baseado em ${p.descricao ?? 'relatório'} · ${p.dias} dias de vendas`;
+    }
+
+    // ── Cabeçalho do painel ──
+    const totalLanches = [...metaMap.values()].reduce((s, v) => s + v, 0);
+    const totalPreparos = plano.producao.length;
+
+    const cabecalho = h('div', { class: 'op-header' },
+      h('div', { class: 'op-header-ref' }, refTxt),
+      h('div', { class: 'op-stats-row' },
+        h('div', { class: 'op-stat op-stat-pink' },
+          h('div', { class: 'op-stat-num' }, totalLanches),
+          h('div', { class: 'op-stat-label' }, 'lanches hoje')
+        ),
+        h('div', { class: 'op-stat op-stat-green' },
+          h('div', { class: 'op-stat-num' }, totalPreparos),
+          h('div', { class: 'op-stat-label' }, 'preparos necessários')
+        ),
+        h('div', { class: 'op-stat op-stat-cream' },
+          h('div', { class: 'op-stat-num' }, plano.compras.filter(c => c.comprar > 1e-9).length),
+          h('div', { class: 'op-stat-label' }, 'itens a comprar')
+        )
+      )
+    );
+
+    // ── Seção: Finalização ──
+    const lanchesPorCat = porCategoria(
+      [...metaMap.entries()]
+        .filter(([, v]) => v > 0)
+        .map(([id, meta]) => {
+          const l = plano.metas ? null : null; // busca no vendas.linhas
+          const linha = vendas.linhas.find(x => x.lanche_id === id);
+          return { id, nome: linha?.nome ?? `#${id}`, categoria: linha?.categoria ?? 'Outros', meta };
+        })
+        .filter(x => x.meta > 0),
+      x => x.categoria
+    );
+
+    const secFinalizacao = h('section', { class: 'op-section' },
+      h('div', { class: 'op-section-title' }, 'Finalização'),
+      h('div', { class: 'op-section-sub' }, 'Quantos lanches produzir hoje'),
+      h('div', { class: 'op-grid' },
+        ...lanchesPorCat.flatMap(([cat, lista]) => [
+          h('div', { class: 'op-grid-cat' }, cat),
+          ...lista.map(l =>
+            h('div', { class: 'op-tile' },
+              h('div', { class: 'op-tile-num' }, l.meta),
+              h('div', { class: 'op-tile-nome' }, l.nome)
+            )
+          )
+        ])
+      )
+    );
+
+    // ── Seção: Produção ──
+    const secProducao = h('section', { class: 'op-section' },
+      h('div', { class: 'op-section-title' }, 'Produção'),
+      h('div', { class: 'op-section-sub' }, 'O que a cozinha precisa preparar'),
+      plano.producao.length
+        ? h('div', { class: 'op-grid' },
+            ...plano.producao.map(p => {
+              const val = p.unidade === 'g' && p.aProduzir >= 1000
+                ? `${nf2.format(p.aProduzir / 1000)} kg`
+                : p.unidade === 'ml' && p.aProduzir >= 1000
+                  ? `${nf2.format(p.aProduzir / 1000)} L`
+                  : `${nf1.format(p.aProduzir)} ${p.unidade}`;
+              return h('div', { class: 'op-tile op-tile-prod' },
+                h('div', { class: 'op-tile-num' }, val),
+                h('div', { class: 'op-tile-nome' }, p.nome)
+              );
+            })
+          )
+        : h('div', { class: 'op-vazio' }, 'Nenhum preparo pendente.')
+    );
+
+    // ── Seção: Compras ──
+    const aComprar = plano.compras.filter(c => c.comprar > 1e-9);
+    const secCompras = aComprar.length
+      ? h('section', { class: 'op-section' },
+          h('div', { class: 'op-section-title' }, 'Compras'),
+          h('div', { class: 'op-section-sub' }, 'Insumos a repor antes da produção'),
+          h('div', { class: 'op-grid' },
+            ...aComprar.map(c =>
+              h('div', { class: 'op-tile op-tile-compra' },
+                h('div', { class: 'op-tile-num' }, `${nf1.format(c.compra.sugerido)} ${c.compra.un}`),
+                h('div', { class: 'op-tile-nome' }, c.nome)
+              )
+            )
+          )
+        )
+      : null;
+
+    reset(corpo, cabecalho, secFinalizacao, secProducao, secCompras);
   } catch (e) {
     reset(corpo, h('div', { class: 'alert' }, `Não foi possível carregar: ${e.message}`));
   }
-}
-
-async function viewOpFinalizacao(alvo) {
-  const [lanches, vendas] = await Promise.all([api('GET', '/api/lanches'), api('GET', '/api/vendas')]);
-
-  // Calcula metas a partir das vendas do mês anterior (modo dias = 1 dia de referência)
-  let metaMap = new Map();
-  if (vendas.periodo && vendas.linhas.length) {
-    try {
-      const res = await api('POST', '/api/metas/sugerir', { modo: 'dias', dias: 1, fator: 1, aplicar: false });
-      res.metas.forEach(m => metaMap.set(m.lancheId, m.meta));
-    } catch { /* fallback: usa meta salva */ }
-  }
-
-  const checks = lerChecks('fin');
-  const ativos = lanches.filter(l => l.ativo && (metaMap.get(l.id) > 0 || l.meta_qtd > 0));
-  if (!ativos.length) {
-    reset(alvo, h('div', { class: 'op-vazio' }, 'Nenhuma meta definida. Configure as metas no Painel de Produção.'));
-    return;
-  }
-
-  const total = ativos.reduce((s, l) => s + (metaMap.get(l.id) ?? l.meta_qtd), 0);
-  const feitos = ativos.filter(l => checks.has(String(l.id))).reduce((s, l) => s + (metaMap.get(l.id) ?? l.meta_qtd), 0);
-  const pct = total > 0 ? Math.round(feitos / total * 100) : 0;
-
-  const barra = h('div', { class: 'op-progresso-wrap' },
-    h('div', { class: 'op-progresso-topo' },
-      h('span', {}, vendas.periodo ? `Referência: ${vendas.periodo.descricao ?? 'mês anterior'} · média diária` : 'Meta do dia'),
-      h('span', { class: 'op-pct' }, `${pct}%`)
-    ),
-    h('div', { class: 'op-barra' }, h('div', { class: 'op-barra-fill', style: `width:${pct}%` }))
-  );
-
-  const grupos = porCategoria(ativos);
-  const cards = grupos.flatMap(([cat, lista]) => [
-    h('div', { class: 'op-cat' }, cat === 'Sanduíche' ? 'Sanduíches' : cat),
-    ...lista.map(l => {
-      const meta = metaMap.get(l.id) ?? l.meta_qtd;
-      const done = checks.has(String(l.id));
-      const card = h('div', { class: `op-card${done ? ' op-done' : ''}` },
-        h('label', { class: 'op-card-inner' },
-          h('div', { class: 'op-card-info' },
-            h('div', { class: 'op-card-nome' }, l.nome),
-            h('div', { class: 'op-card-qtd' }, h('span', { class: 'op-num' }, meta), h('span', { class: 'op-un' }, 'un'))
-          ),
-          h('input', {
-            type: 'checkbox', class: 'op-check', checked: done,
-            onchange(e) {
-              salvarCheck('fin', String(l.id), e.target.checked);
-              card.classList.toggle('op-done', e.target.checked);
-              // Recalcula barra
-              const c2 = lerChecks('fin');
-              const f2 = ativos.filter(x => c2.has(String(x.id))).reduce((s, x) => s + (metaMap.get(x.id) ?? x.meta_qtd), 0);
-              const p2 = total > 0 ? Math.round(f2 / total * 100) : 0;
-              alvo.querySelector('.op-pct').textContent = `${p2}%`;
-              alvo.querySelector('.op-barra-fill').style.width = `${p2}%`;
-            }
-          })
-        )
-      );
-      return card;
-    })
-  ]);
-
-  const btnReset = h('button', { class: 'btn ghost', style: 'margin-top:20px', onclick() {
-    try { localStorage.removeItem(chaveOp('fin')); } catch { /* ignora */ }
-    viewOpFinalizacao(alvo);
-  }}, 'Reiniciar checklist do dia');
-
-  reset(alvo, barra, ...cards, h('div', { class: 'actions' }, btnReset));
-}
-
-async function viewOpProducao(alvo) {
-  const plano = await api('GET', '/api/plano');
-  const checks = lerChecks('prod');
-
-  if (!plano.producao.length && !plano.compras.length) {
-    reset(alvo, h('div', { class: 'op-vazio' }, 'Nenhuma produção necessária. Defina as metas no Painel de Produção.'));
-    return;
-  }
-
-  const totalP = plano.producao.length;
-  const feitosP = plano.producao.filter(p => checks.has(`p-${p.itemId}`)).length;
-  const pct = totalP > 0 ? Math.round(feitosP / totalP * 100) : 0;
-
-  const barra = h('div', { class: 'op-progresso-wrap' },
-    h('div', { class: 'op-progresso-topo' },
-      h('span', {}, 'Preparos do dia'),
-      h('span', { class: 'op-pct' }, `${pct}%`)
-    ),
-    h('div', { class: 'op-barra' }, h('div', { class: 'op-barra-fill', style: `width:${pct}%` }))
-  );
-
-  const titulo = h('div', { class: 'op-cat' }, 'O que produzir');
-
-  const itensProducao = plano.producao.map(p => {
-    const key = `p-${p.itemId}`;
-    const done = checks.has(key);
-    const loteTxt = p.lotes === 1 ? '1 lote' : `${nf1.format(p.lotes)} lotes`;
-    const rendTxt = `rende ${qtd(p.rendimentoLote, p)} por lote`;
-    const card = h('div', { class: `op-card${done ? ' op-done' : ''}` },
-      h('label', { class: 'op-card-inner' },
-        h('div', { class: 'op-card-info' },
-          h('div', { class: 'op-card-nome' }, p.nome),
-          h('div', { class: 'op-card-sub' }, `${loteTxt} · ${rendTxt}`),
-          h('div', { class: 'op-card-qtd' }, h('span', { class: 'op-num' }, nf1.format(p.aProduzir)), h('span', { class: 'op-un' }, p.unidade === 'g' ? 'g' : p.unidade === 'ml' ? 'ml' : 'un'))
-        ),
-        h('input', {
-          type: 'checkbox', class: 'op-check', checked: done,
-          onchange(e) {
-            salvarCheck('prod', key, e.target.checked);
-            card.classList.toggle('op-done', e.target.checked);
-            const c2 = lerChecks('prod');
-            const f2 = plano.producao.filter(x => c2.has(`p-${x.itemId}`)).length;
-            const p2 = totalP > 0 ? Math.round(f2 / totalP * 100) : 0;
-            alvo.querySelector('.op-pct').textContent = `${p2}%`;
-            alvo.querySelector('.op-barra-fill').style.width = `${p2}%`;
-          }
-        })
-      )
-    );
-    return card;
-  });
-
-  const btnReset = h('button', { class: 'btn ghost', style: 'margin-top:20px', onclick() {
-    try { localStorage.removeItem(chaveOp('prod')); } catch { /* ignora */ }
-    viewOpProducao(alvo);
-  }}, 'Reiniciar checklist do dia');
-
-  reset(alvo, barra, titulo, ...itensProducao, h('div', { class: 'actions' }, btnReset));
 }
 
 // ── Navegação ─────────────────────────────────────────────────────────────
