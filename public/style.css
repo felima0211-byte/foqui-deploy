@@ -237,8 +237,37 @@ details > summary:focus-visible { outline: 3px solid var(--pink); outline-offset
 .v2-prod-lote { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
 .v2-prod-card-compra .v2-prod-lote { color: inherit; opacity: .7; }
 
-@media (max-width: 480px) {
+/* Tabela v2 */
+.v2-scroll  { overflow-x: auto; margin-bottom: 24px; }
+.v2-table   { border-collapse: collapse; width: 100%; min-width: 480px; }
+.v2-table th, .v2-table td { padding: 10px 10px; border-bottom: 1px solid var(--line); font-size: 15px; text-align: left; vertical-align: middle; }
+.v2-table th { font-size: 12px; color: var(--muted); font-weight: 500; }
+.v2-table td.n, .v2-table th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.v2-saldo   { font-weight: 700; }
+.v2-inpt-table { font: 700 16px var(--body) !important; text-align: right; padding: 6px 8px; min-height: 0; height: 36px; width: 80px; border-radius: 8px; }
+.v2-inpt-wrap { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.v2-inpt-un  { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* Calendário */
+.v2-cal, .v2-cal-prod { margin-bottom: 16px; }
+.v2-cal-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.v2-cal-dia  { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 10px 8px; text-align: center; }
+.v2-cal-dia-prod { text-align: left; padding: 10px 10px; }
+.v2-cal-hoje { border-color: var(--ink); border-width: 2px; background: var(--ink); color: var(--bg); }
+.v2-cal-nome { font-size: 11px; font-weight: 600; margin-bottom: 6px; opacity: .75; }
+.v2-cal-hoje .v2-cal-nome { opacity: .9; }
+.v2-cal-num  { font: 400 28px/1 var(--head); }
+.v2-cal-un   { font-size: 11px; margin-top: 3px; opacity: .7; }
+.v2-cal-item { display: flex; flex-direction: column; margin-bottom: 5px; }
+.v2-cal-item-qtd  { font: 400 15px/1 var(--head); }
+.v2-cal-item-nome { font-size: 11px; opacity: .75; line-height: 1.2; margin-top: 1px; }
+.v2-cal-hoje .v2-cal-item-nome { opacity: .85; }
+.v2-cal-mais { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.v2-cal-hoje .v2-cal-mais { color: inherit; opacity: .7; }
+
+@media (max-width: 600px) {
   .v2-equipes { grid-template-columns: 1fr; }
+  .v2-cal-grid { grid-template-columns: repeat(3, 1fr); }
   .v2-bloco-num { font-size: 36px; }
   .v2-disp-input { font-size: 32px !important; }
   .v2-prod-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }

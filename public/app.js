@@ -642,6 +642,40 @@ async function viewOperacional(alvo) {
   );
 }
 
+// Dias úteis da semana corrente (seg a sáb)
+function diasUteisSemana() {
+  const hoje = new Date();
+  const dow = hoje.getDay(); // 0=dom
+  const seg = new Date(hoje); seg.setDate(hoje.getDate() - (dow === 0 ? 6 : dow - 1));
+  const dias = [];
+  const nomes = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(seg); d.setDate(seg.getDate() + i);
+    dias.push({ nome: nomes[i], data: d, label: `${nomes[i]} ${d.getDate()}/${d.getMonth() + 1}`, isHoje: d.toDateString() === hoje.toDateString() });
+  }
+  return dias;
+}
+
+// Distribui total por 6 dias úteis, menor resto nos últimos dias
+function distribuir(total, dias) {
+  if (!(total > 0)) return dias.map(() => 0);
+  const base = total / dias.length;
+  const inteiros = dias.map(() => Math.floor(base));
+  let resto = Math.round((total - inteiros.reduce((s, v) => s + v, 0)) * 1000) / 1000;
+  // distribui o resto nos primeiros dias
+  return inteiros.map((v, i) => {
+    const extra = Math.min(resto, Math.round((base - v) * 1000) / 1000);
+    const r = Math.round((v + extra) * 1000) / 1000;
+    resto = Math.round((resto - extra) * 1000) / 1000;
+    return r;
+  });
+}
+
+// Chave localStorage mensal (não expira no dia, dura o mês)
+function chaveMes() { const d = new Date(); return `foqui-estq-${d.getFullYear()}-${d.getMonth()}`; }
+function lerEstoque() { try { return JSON.parse(localStorage.getItem(chaveMes()) || '{}'); } catch { return {}; } }
+function salvarEstoque(obj) { try { localStorage.setItem(chaveMes(), JSON.stringify(obj)); } catch { /* ignora */ } }
+
 // ── Painel: Finalização ──
 async function viewV2Finalizacao(alvo) {
   reset(alvo, h('div', { class: 'v2-loading' }, 'Carregando...'));
@@ -651,70 +685,91 @@ async function viewV2Finalizacao(alvo) {
       h('button', { class: 'btn', onclick: () => viewOperacional(alvo) }, '← Voltar'));
     return;
   }
-  const { lanches, refTxt } = dados;
-  const hoje = new Date().toISOString().slice(0, 10);
-  const chaveDisp = `foqui-fin-${hoje}`;
-  let disp = {};
-  try { disp = JSON.parse(localStorage.getItem(chaveDisp) || '{}'); } catch { disp = {}; }
+  const { vendas, lanches, refTxt } = dados;
+  const estq = lerEstoque();
+  const diasSemana = diasUteisSemana();
 
-  const totalMeta = lanches.reduce((s, l) => s + l.meta, 0);
-  const grupos = porCategoria(lanches, x => x.categoria);
+  // Monta tabela de lanches: vendido no mês | a produzir no mês | estoque | saldo
+  const totalVendido = lanches.reduce((s, l) => s + (vendas.linhas.find(x => x.lanche_id === l.id)?.qtd ?? 0), 0);
 
-  function statusBadge(tem, precisa) {
-    if (tem === '' || isNaN(Number(tem))) return { cls: '', txt: 'informe o disponível' };
-    const diff = Number(tem) - precisa;
-    if (diff >= 0) return { cls: 'v2-badge-ok', txt: `✓ ok · sobram ${diff}` };
-    return { cls: 'v2-badge-falta', txt: `atenção · faltam ${Math.abs(diff)}` };
-  }
+  const linhasTabela = lanches.map(l => {
+    const vendidoMes = vendas.linhas.find(x => x.lanche_id === l.id)?.qtd ?? 0;
+    const chave = `fin-${l.id}`;
+    const estqAtual = Number(estq[chave] ?? 0);
+    const aProduzir = Math.max(0, vendidoMes - estqAtual);
+    return { ...l, vendidoMes, estqAtual, aProduzir, chave };
+  });
 
-  const cards = grupos.flatMap(([cat, lista]) => [
-    h('div', { class: 'v2-cat-label' }, PLURAL[cat] ?? cat),
-    ...lista.map(l => {
-      const temVal = String(disp[l.id] ?? '');
-      const { cls, txt } = statusBadge(temVal, l.meta);
-      const badge = h('div', { class: `v2-badge ${cls}` }, txt);
-      const inp = h('input', {
-        type: 'number', min: '0', placeholder: '—', value: temVal,
-        class: 'v2-disp-input',
-        oninput(e) {
-          disp[l.id] = e.target.value;
-          try { localStorage.setItem(chaveDisp, JSON.stringify(disp)); } catch { /* ignora */ }
-          const { cls: c2, txt: t2 } = statusBadge(e.target.value, l.meta);
-          badge.textContent = t2;
-          badge.className = `v2-badge ${c2}`;
-        }
-      });
-      return h('div', { class: 'v2-fin-card' },
-        h('div', { class: 'v2-fin-nome' }, l.nome),
-        h('div', { class: 'v2-fin-cols' },
-          h('div', { class: 'v2-fin-bloco' },
-            h('div', { class: 'v2-bloco-label' }, 'Meta do dia'),
-            h('div', { class: 'v2-bloco-num' }, l.meta),
-            h('div', { class: 'v2-bloco-un' }, 'unidades')
-          ),
-          h('div', { class: 'v2-fin-bloco v2-fin-bloco-input' },
-            h('div', { class: 'v2-bloco-label' }, 'Tenho disponível'),
-            inp,
-            h('div', { class: 'v2-bloco-un' }, 'unidades')
-          )
-        ),
-        badge
-      );
-    })
-  ]);
-
-  reset(alvo,
-    h('div', { class: 'v2-painel-header' },
-      h('button', { class: 'v2-voltar', onclick: () => viewOperacional(alvo) }, '← Equipes'),
-      h('div', { class: 'v2-painel-titulo' }, '🥪 Finalização'),
-      h('div', { class: 'v2-painel-ref' }, refTxt)
-    ),
-    h('div', { class: 'v2-stat-solo' },
-      h('div', { class: 'v2-stat-num' }, totalMeta),
-      h('div', { class: 'v2-stat-label' }, 'lanches a montar hoje')
-    ),
-    h('div', { class: 'v2-cards' }, ...cards)
+  const cabecalho = h('div', { class: 'v2-painel-header' },
+    h('button', { class: 'v2-voltar', onclick: () => viewOperacional(alvo) }, '← Equipes'),
+    h('div', { class: 'v2-painel-titulo' }, '🥪 Finalização'),
+    h('div', { class: 'v2-painel-ref' }, refTxt)
   );
+
+  const statRow = h('div', { class: 'v2-stats-row' },
+    h('div', { class: 'v2-stat-card', style: 'background:var(--pink);color:#1f4d3f' },
+      h('div', { class: 'v2-stat-num' }, totalVendido),
+      h('div', { class: 'v2-stat-label' }, 'vendidos no mês')
+    ),
+    h('div', { class: 'v2-stat-card v2-stat-green' },
+      h('div', { class: 'v2-stat-num' }, linhasTabela.reduce((s, l) => s + l.aProduzir, 0)),
+      h('div', { class: 'v2-stat-label' }, 'a produzir no mês')
+    )
+  );
+
+  // Tabela
+  const tabelaWrap = h('div', { class: 'v2-scroll' },
+    h('table', { class: 'v2-table' },
+      h('thead', {},
+        h('tr', {},
+          h('th', {}, 'Lanche'),
+          h('th', { class: 'n' }, 'Vendido'),
+          h('th', { class: 'n' }, 'Estoque atual'),
+          h('th', { class: 'n' }, 'A produzir')
+        )
+      ),
+      h('tbody', {},
+        ...linhasTabela.map(l => {
+          const tdSaldo = h('td', { class: 'n v2-saldo' }, l.aProduzir);
+          tdSaldo.style.color = l.aProduzir > 0 ? 'var(--bad)' : 'var(--ok)';
+          const inpEstq = h('input', {
+            type: 'number', min: '0', value: l.estqAtual || '',
+            placeholder: '0', class: 'v2-inpt-table',
+            oninput(e) {
+              estq[l.chave] = Number(e.target.value) || 0;
+              salvarEstoque(estq);
+              const novo = Math.max(0, l.vendidoMes - (Number(e.target.value) || 0));
+              tdSaldo.textContent = novo;
+              tdSaldo.style.color = novo > 0 ? 'var(--bad)' : 'var(--ok)';
+            }
+          });
+          return h('tr', {},
+            h('td', {}, l.nome),
+            h('td', { class: 'n' }, l.vendidoMes),
+            h('td', { class: 'n' }, inpEstq),
+            tdSaldo
+          );
+        })
+      )
+    )
+  );
+
+  // Calendário semanal de finalização
+  const distribFin = distribuir(linhasTabela.reduce((s, l) => s + l.aProduzir, 0), diasSemana);
+  const calFin = h('div', { class: 'v2-cal' },
+    h('div', { class: 'v2-section-label', style: 'margin-bottom:10px' }, 'Distribuição semanal'),
+    h('div', { class: 'v2-cal-grid' },
+      ...diasSemana.map((d, i) =>
+        h('div', { class: `v2-cal-dia${d.isHoje ? ' v2-cal-hoje' : ''}` },
+          h('div', { class: 'v2-cal-nome' }, d.label),
+          h('div', { class: 'v2-cal-num' }, Math.round(distribFin[i])),
+          h('div', { class: 'v2-cal-un' }, 'un')
+        )
+      )
+    )
+  );
+
+  reset(alvo, cabecalho, statRow, h('div', { class: 'v2-section-label' }, 'Lanches por mês'), tabelaWrap, calFin);
 }
 
 // ── Painel: Produção ──
@@ -727,60 +782,98 @@ async function viewV2Producao(alvo) {
     return;
   }
   const { plano, refTxt } = dados;
+  const estq = lerEstoque();
+  const diasSemana = diasUteisSemana();
 
-  const preparos = plano.producao;
-  const compras  = plano.compras.filter(c => c.comprar > 1e-9);
+  // Preparos: total mensal calculado pelo plano
+  const preparos = plano.producao.map(p => {
+    const chave = `prod-${p.itemId}`;
+    const estqAtual = Number(estq[chave] ?? 0);
+    const div = p.unidade === 'g' || p.unidade === 'ml' ? 1000 : 1;
+    const totalUn = p.aProduzir; // em g/ml/un
+    const aProduzir = Math.max(0, totalUn - estqAtual * div);
+    return { ...p, chave, estqAtual, totalUn, aProduzir };
+  });
 
-  reset(alvo,
-    h('div', { class: 'v2-painel-header' },
-      h('button', { class: 'v2-voltar', onclick: () => viewOperacional(alvo) }, '← Equipes'),
-      h('div', { class: 'v2-painel-titulo' }, '🔪 Produção'),
-      h('div', { class: 'v2-painel-ref' }, refTxt)
-    ),
-
-    // Stats
-    h('div', { class: 'v2-stats-row' },
-      h('div', { class: 'v2-stat-card v2-stat-green' },
-        h('div', { class: 'v2-stat-num' }, preparos.length),
-        h('div', { class: 'v2-stat-label' }, 'preparos')
-      ),
-      h('div', { class: 'v2-stat-card v2-stat-warn' },
-        h('div', { class: 'v2-stat-num' }, compras.length),
-        h('div', { class: 'v2-stat-label' }, 'compras pendentes')
-      )
-    ),
-
-    // Preparos
-    h('div', { class: 'v2-section-label' }, 'O que produzir hoje'),
-    preparos.length
-      ? h('div', { class: 'v2-prod-grid' },
-          ...preparos.map(p =>
-            h('div', { class: 'v2-prod-card' },
-              h('div', { class: 'v2-prod-qtd' }, fmtQtd(p.aProduzir, p.unidade)),
-              h('div', { class: 'v2-prod-nome' }, p.nome),
-              p.lotes > 0
-                ? h('div', { class: 'v2-prod-lote' }, `${nf1.format(p.lotes)} lote${p.lotes !== 1 ? 's' : ''} · ${fmtQtd(p.rendimentoLote, p.unidade)} cada`)
-                : null
-            )
-          )
-        )
-      : h('div', { class: 'v2-empty' }, 'Nenhum preparo necessário.'),
-
-    // Compras
-    compras.length
-      ? h('div', {},
-          h('div', { class: 'v2-section-label', style: 'margin-top:28px' }, 'Compras a fazer antes de produzir'),
-          h('div', { class: 'v2-prod-grid' },
-            ...compras.map(c =>
-              h('div', { class: 'v2-prod-card v2-prod-card-compra' },
-                h('div', { class: 'v2-prod-qtd' }, `${nf1.format(c.compra.sugerido)} ${c.compra.un}`),
-                h('div', { class: 'v2-prod-nome' }, c.nome)
-              )
-            )
-          )
-        )
-      : null
+  const cabecalho = h('div', { class: 'v2-painel-header' },
+    h('button', { class: 'v2-voltar', onclick: () => viewOperacional(alvo) }, '← Equipes'),
+    h('div', { class: 'v2-painel-titulo' }, '🔪 Produção'),
+    h('div', { class: 'v2-painel-ref' }, refTxt)
   );
+
+  // Tabela de preparos
+  const tabelaWrap = h('div', { class: 'v2-scroll' },
+    h('table', { class: 'v2-table' },
+      h('thead', {},
+        h('tr', {},
+          h('th', {}, 'Preparo'),
+          h('th', { class: 'n' }, 'Total mês'),
+          h('th', { class: 'n' }, 'Estoque atual'),
+          h('th', { class: 'n' }, 'A produzir')
+        )
+      ),
+      h('tbody', {},
+        ...preparos.map(p => {
+          const tdSaldo = h('td', { class: 'n v2-saldo' }, fmtQtd(p.aProduzir, p.unidade));
+          tdSaldo.style.color = p.aProduzir > 0 ? 'var(--bad)' : 'var(--ok)';
+          const inpEstq = h('input', {
+            type: 'number', min: '0', value: p.estqAtual || '',
+            placeholder: '0', class: 'v2-inpt-table',
+            oninput(e) {
+              estq[p.chave] = Number(e.target.value) || 0;
+              salvarEstoque(estq);
+              const div = p.unidade === 'g' || p.unidade === 'ml' ? 1000 : 1;
+              const novo = Math.max(0, p.totalUn - (Number(e.target.value) || 0) * div);
+              tdSaldo.textContent = fmtQtd(novo, p.unidade);
+              tdSaldo.style.color = novo > 0 ? 'var(--bad)' : 'var(--ok)';
+            }
+          });
+          const unLabel = p.unidade === 'g' ? 'kg' : p.unidade === 'ml' ? 'L' : 'un';
+          return h('tr', {},
+            h('td', {}, p.nome),
+            h('td', { class: 'n' }, fmtQtd(p.totalUn, p.unidade)),
+            h('td', { class: 'n' },
+              h('div', { class: 'v2-inpt-wrap' }, inpEstq, h('span', { class: 'v2-inpt-un' }, unLabel))
+            ),
+            tdSaldo
+          );
+        })
+      )
+    )
+  );
+
+  // Calendário de produção — distribui o total de preparos por dia
+  const totalGeral = preparos.reduce((s, p) => s + p.aProduzir, 0);
+  const distribProd = distribuir(totalGeral, diasSemana);
+
+  // Monta o que cada dia precisa fazer (proporcional)
+  function itensDoDia(frac) {
+    return preparos
+      .map(p => ({ nome: p.nome, qtd: p.aProduzir * frac, unidade: p.unidade }))
+      .filter(x => x.qtd > 0.01);
+  }
+
+  const calProd = h('div', { class: 'v2-cal-prod' },
+    h('div', { class: 'v2-section-label', style: 'margin-bottom:10px' }, 'Semana de produção'),
+    h('div', { class: 'v2-cal-grid' },
+      ...diasSemana.map((d, i) => {
+        const frac = totalGeral > 0 ? distribProd[i] / totalGeral : 0;
+        const itens = itensDoDia(frac);
+        return h('div', { class: `v2-cal-dia v2-cal-dia-prod${d.isHoje ? ' v2-cal-hoje' : ''}` },
+          h('div', { class: 'v2-cal-nome' }, d.label),
+          ...itens.slice(0, 4).map(it =>
+            h('div', { class: 'v2-cal-item' },
+              h('span', { class: 'v2-cal-item-qtd' }, fmtQtd(it.qtd, it.unidade)),
+              h('span', { class: 'v2-cal-item-nome' }, it.nome)
+            )
+          ),
+          itens.length > 4 ? h('div', { class: 'v2-cal-mais' }, `+${itens.length - 4} itens`) : null
+        );
+      })
+    )
+  );
+
+  reset(alvo, cabecalho, h('div', { class: 'v2-section-label' }, 'Preparos do mês'), tabelaWrap, calProd);
 }
 
 // ── Navegação ─────────────────────────────────────────────────────────────
