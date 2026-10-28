@@ -586,160 +586,201 @@ async function viewCompras(el) {
   );
 }
 
-// ── Telas Operacionais ────────────────────────────────────────────────────
+// ── Painel Operacional v2 ─────────────────────────────────────────────────
 
-// ── Painel Operacional ────────────────────────────────────────────────────
+function fmtQtd(aProduzir, unidade) {
+  if (unidade === 'g') return aProduzir >= 1000 ? `${nf2.format(aProduzir / 1000)} kg` : `${nf1.format(aProduzir)} g`;
+  if (unidade === 'ml') return aProduzir >= 1000 ? `${nf2.format(aProduzir / 1000)} L` : `${nf1.format(aProduzir)} ml`;
+  return `${nf1.format(aProduzir)} un`;
+}
 
+// Carrega vendas + metas sugeridas (média diária, sem adicionais)
+async function carregarDadosOp() {
+  const [vendas, plano] = await Promise.all([api('GET', '/api/vendas'), api('GET', '/api/plano')]);
+  let metaMap = new Map();
+  let refTxt = 'sem relatório de vendas cadastrado';
+  if (vendas.periodo && vendas.linhas.length) {
+    const res = await api('POST', '/api/metas/sugerir', { modo: 'dias', dias: 1, fator: 1, aplicar: false });
+    res.metas.forEach(m => metaMap.set(m.lancheId, m.meta));
+    const p = vendas.periodo;
+    refTxt = `${p.rotulo} · ${p.dias} dias de operação`;
+  }
+  // Só categorias de lanche real (sem Adicional)
+  const lanches = [...metaMap.entries()]
+    .map(([id, meta]) => {
+      const linha = vendas.linhas.find(x => x.lanche_id === id);
+      return { id, nome: linha?.nome ?? `#${id}`, categoria: linha?.categoria ?? 'Outros', meta };
+    })
+    .filter(x => x.meta > 0 && x.categoria !== 'Adicional');
+  return { vendas, plano, metaMap, lanches, refTxt };
+}
+
+// ── Tela: seleção de equipe ──
 async function viewOperacional(alvo) {
-  const corpo = h('div');
-  reset(alvo, corpo);
-  try {
-    // Busca vendas e plano em paralelo
-    const [vendas, plano] = await Promise.all([
-      api('GET', '/api/vendas'),
-      api('GET', '/api/plano'),
-    ]);
+  const hoje = new Date();
+  const dataFmt = hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dataFmtCap = dataFmt.charAt(0).toUpperCase() + dataFmt.slice(1);
 
-    // Metas baseadas 100% na média diária do último relatório de vendas
-    let metaMap = new Map();
-    let refTxt = 'sem relatório de vendas';
-    if (vendas.periodo && vendas.linhas.length) {
-      const res = await api('POST', '/api/metas/sugerir', { modo: 'dias', dias: 1, fator: 1, aplicar: false });
-      res.metas.forEach(m => metaMap.set(m.lancheId, m.meta));
-      const p = vendas.periodo;
-      refTxt = `Baseado em ${p.descricao ?? 'relatório'} · ${p.dias} dias de vendas`;
-    }
-
-    // ── Cabeçalho do painel ──
-    const totalLanches = [...metaMap.values()].reduce((s, v) => s + v, 0);
-    const totalPreparos = plano.producao.length;
-
-    const cabecalho = h('div', { class: 'op-header' },
-      h('div', { class: 'op-header-ref' }, refTxt),
-      h('div', { class: 'op-stats-row' },
-        h('div', { class: 'op-stat op-stat-pink' },
-          h('div', { class: 'op-stat-num' }, totalLanches),
-          h('div', { class: 'op-stat-label' }, 'lanches hoje')
+  reset(alvo,
+    h('div', { class: 'v2-hero' },
+      h('div', { class: 'v2-data' }, dataFmtCap),
+      h('div', { class: 'v2-titulo' }, 'Qual é a sua equipe?'),
+      h('div', { class: 'v2-sub' }, 'Toque para abrir o painel do seu setor'),
+      h('div', { class: 'v2-equipes' },
+        h('button', { class: 'v2-equipe v2-equipe-fin', onclick: () => viewV2Finalizacao(alvo) },
+          h('div', { class: 'v2-eq-icon' }, '🥪'),
+          h('div', { class: 'v2-eq-titulo' }, 'Finalização'),
+          h('div', { class: 'v2-eq-desc' }, 'Montagem e atendimento')
         ),
-        h('div', { class: 'op-stat op-stat-green' },
-          h('div', { class: 'op-stat-num' }, totalPreparos),
-          h('div', { class: 'op-stat-label' }, 'preparos necessários')
-        ),
-        h('div', { class: 'op-stat op-stat-cream' },
-          h('div', { class: 'op-stat-num' }, plano.compras.filter(c => c.comprar > 1e-9).length),
-          h('div', { class: 'op-stat-label' }, 'itens a comprar')
+        h('button', { class: 'v2-equipe v2-equipe-prod', onclick: () => viewV2Producao(alvo) },
+          h('div', { class: 'v2-eq-icon' }, '🔪'),
+          h('div', { class: 'v2-eq-titulo' }, 'Produção'),
+          h('div', { class: 'v2-eq-desc' }, 'Preparo de insumos e cozinha')
         )
       )
-    );
+    )
+  );
+}
 
-    // ── Seção: Finalização ──
-    const hoje = new Date().toISOString().slice(0, 10);
-    const chaveDisp = `foqui-disp-${hoje}`;
-    let disp = {};
-    try { disp = JSON.parse(localStorage.getItem(chaveDisp) || '{}'); } catch { disp = {}; }
+// ── Painel: Finalização ──
+async function viewV2Finalizacao(alvo) {
+  reset(alvo, h('div', { class: 'v2-loading' }, 'Carregando...'));
+  let dados;
+  try { dados = await carregarDadosOp(); } catch (e) {
+    reset(alvo, h('div', { class: 'alert' }, `Erro ao carregar: ${e.message}`),
+      h('button', { class: 'btn', onclick: () => viewOperacional(alvo) }, '← Voltar'));
+    return;
+  }
+  const { lanches, refTxt } = dados;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const chaveDisp = `foqui-fin-${hoje}`;
+  let disp = {};
+  try { disp = JSON.parse(localStorage.getItem(chaveDisp) || '{}'); } catch { disp = {}; }
 
-    const lanchesPorCat = porCategoria(
-      [...metaMap.entries()]
-        .filter(([, v]) => v > 0)
-        .map(([id, meta]) => {
-          const linha = vendas.linhas.find(x => x.lanche_id === id);
-          return { id, nome: linha?.nome ?? `#${id}`, categoria: linha?.categoria ?? 'Outros', meta };
-        })
-        .filter(x => x.meta > 0),
-      x => x.categoria
-    );
+  const totalMeta = lanches.reduce((s, l) => s + l.meta, 0);
+  const grupos = porCategoria(lanches, x => x.categoria);
 
-    function statusTile(tem, precisa) {
-      if (tem === '' || tem === null || isNaN(tem)) return { cls: '', txt: '' };
-      const diff = tem - precisa;
-      if (diff >= 0) return { cls: 'op-tile-ok', txt: `+${diff} a mais` };
-      return { cls: 'op-tile-falta', txt: `faltam ${Math.abs(diff)}` };
-    }
+  function statusBadge(tem, precisa) {
+    if (tem === '' || isNaN(Number(tem))) return { cls: '', txt: 'informe o disponível' };
+    const diff = Number(tem) - precisa;
+    if (diff >= 0) return { cls: 'v2-badge-ok', txt: `✓ ok · sobram ${diff}` };
+    return { cls: 'v2-badge-falta', txt: `atenção · faltam ${Math.abs(diff)}` };
+  }
 
-    const secFinalizacao = h('section', { class: 'op-section' },
-      h('div', { class: 'op-section-title' }, 'Finalização'),
-      h('div', { class: 'op-section-sub' }, 'Média diária do último relatório de vendas · informe quantos você tem disponíveis'),
-      h('div', { class: 'op-fin-grid' },
-        ...lanchesPorCat.flatMap(([cat, lista]) => [
-          h('div', { class: 'op-grid-cat' }, cat),
-          ...lista.map(l => {
-            const temVal = disp[l.id] ?? '';
-            const { cls, txt } = statusTile(temVal === '' ? NaN : Number(temVal), l.meta);
-            const badge = h('div', { class: `op-fin-badge${cls ? ' ' + cls : ''}` }, txt);
-            const inputTem = h('input', {
-              type: 'number', min: '0', placeholder: '0',
-              value: temVal === '' ? '' : temVal,
-              class: 'op-fin-input',
-              oninput(e) {
-                const v = e.target.value === '' ? '' : Number(e.target.value);
-                disp[l.id] = v;
-                try { localStorage.setItem(chaveDisp, JSON.stringify(disp)); } catch { /* ignora */ }
-                const { cls: c2, txt: t2 } = statusTile(v === '' ? NaN : Number(v), l.meta);
-                badge.textContent = t2;
-                badge.className = `op-fin-badge${c2 ? ' ' + c2 : ''}`;
-              }
-            });
-            return h('div', { class: 'op-fin-card' },
-              h('div', { class: 'op-fin-nome' }, l.nome),
-              h('div', { class: 'op-fin-row' },
-                h('div', { class: 'op-fin-col' },
-                  h('div', { class: 'op-fin-label' }, 'Precisa hoje'),
-                  h('div', { class: 'op-fin-meta' }, l.meta)
-                ),
-                h('div', { class: 'op-fin-col' },
-                  h('div', { class: 'op-fin-label' }, 'Tem disponível'),
-                  inputTem
-                )
-              ),
-              badge
-            );
-          })
-        ])
-      )
-    );
-
-    // ── Seção: Produção ──
-    const secProducao = h('section', { class: 'op-section' },
-      h('div', { class: 'op-section-title' }, 'Produção'),
-      h('div', { class: 'op-section-sub' }, 'O que a cozinha precisa preparar'),
-      plano.producao.length
-        ? h('div', { class: 'op-grid' },
-            ...plano.producao.map(p => {
-              const val = p.unidade === 'g' && p.aProduzir >= 1000
-                ? `${nf2.format(p.aProduzir / 1000)} kg`
-                : p.unidade === 'ml' && p.aProduzir >= 1000
-                  ? `${nf2.format(p.aProduzir / 1000)} L`
-                  : `${nf1.format(p.aProduzir)} ${p.unidade}`;
-              return h('div', { class: 'op-tile op-tile-prod' },
-                h('div', { class: 'op-tile-num' }, val),
-                h('div', { class: 'op-tile-nome' }, p.nome)
-              );
-            })
+  const cards = grupos.flatMap(([cat, lista]) => [
+    h('div', { class: 'v2-cat-label' }, PLURAL[cat] ?? cat),
+    ...lista.map(l => {
+      const temVal = String(disp[l.id] ?? '');
+      const { cls, txt } = statusBadge(temVal, l.meta);
+      const badge = h('div', { class: `v2-badge ${cls}` }, txt);
+      const inp = h('input', {
+        type: 'number', min: '0', placeholder: '—', value: temVal,
+        class: 'v2-disp-input',
+        oninput(e) {
+          disp[l.id] = e.target.value;
+          try { localStorage.setItem(chaveDisp, JSON.stringify(disp)); } catch { /* ignora */ }
+          const { cls: c2, txt: t2 } = statusBadge(e.target.value, l.meta);
+          badge.textContent = t2;
+          badge.className = `v2-badge ${c2}`;
+        }
+      });
+      return h('div', { class: 'v2-fin-card' },
+        h('div', { class: 'v2-fin-nome' }, l.nome),
+        h('div', { class: 'v2-fin-cols' },
+          h('div', { class: 'v2-fin-bloco' },
+            h('div', { class: 'v2-bloco-label' }, 'Meta do dia'),
+            h('div', { class: 'v2-bloco-num' }, l.meta),
+            h('div', { class: 'v2-bloco-un' }, 'unidades')
+          ),
+          h('div', { class: 'v2-fin-bloco v2-fin-bloco-input' },
+            h('div', { class: 'v2-bloco-label' }, 'Tenho disponível'),
+            inp,
+            h('div', { class: 'v2-bloco-un' }, 'unidades')
           )
-        : h('div', { class: 'op-vazio' }, 'Nenhum preparo pendente.')
-    );
+        ),
+        badge
+      );
+    })
+  ]);
 
-    // ── Seção: Compras ──
-    const aComprar = plano.compras.filter(c => c.comprar > 1e-9);
-    const secCompras = aComprar.length
-      ? h('section', { class: 'op-section' },
-          h('div', { class: 'op-section-title' }, 'Compras'),
-          h('div', { class: 'op-section-sub' }, 'Insumos a repor antes da produção'),
-          h('div', { class: 'op-grid' },
-            ...aComprar.map(c =>
-              h('div', { class: 'op-tile op-tile-compra' },
-                h('div', { class: 'op-tile-num' }, `${nf1.format(c.compra.sugerido)} ${c.compra.un}`),
-                h('div', { class: 'op-tile-nome' }, c.nome)
+  reset(alvo,
+    h('div', { class: 'v2-painel-header' },
+      h('button', { class: 'v2-voltar', onclick: () => viewOperacional(alvo) }, '← Equipes'),
+      h('div', { class: 'v2-painel-titulo' }, '🥪 Finalização'),
+      h('div', { class: 'v2-painel-ref' }, refTxt)
+    ),
+    h('div', { class: 'v2-stat-solo' },
+      h('div', { class: 'v2-stat-num' }, totalMeta),
+      h('div', { class: 'v2-stat-label' }, 'lanches a montar hoje')
+    ),
+    h('div', { class: 'v2-cards' }, ...cards)
+  );
+}
+
+// ── Painel: Produção ──
+async function viewV2Producao(alvo) {
+  reset(alvo, h('div', { class: 'v2-loading' }, 'Carregando...'));
+  let dados;
+  try { dados = await carregarDadosOp(); } catch (e) {
+    reset(alvo, h('div', { class: 'alert' }, `Erro ao carregar: ${e.message}`),
+      h('button', { class: 'btn', onclick: () => viewOperacional(alvo) }, '← Voltar'));
+    return;
+  }
+  const { plano, refTxt } = dados;
+
+  const preparos = plano.producao;
+  const compras  = plano.compras.filter(c => c.comprar > 1e-9);
+
+  reset(alvo,
+    h('div', { class: 'v2-painel-header' },
+      h('button', { class: 'v2-voltar', onclick: () => viewOperacional(alvo) }, '← Equipes'),
+      h('div', { class: 'v2-painel-titulo' }, '🔪 Produção'),
+      h('div', { class: 'v2-painel-ref' }, refTxt)
+    ),
+
+    // Stats
+    h('div', { class: 'v2-stats-row' },
+      h('div', { class: 'v2-stat-card v2-stat-green' },
+        h('div', { class: 'v2-stat-num' }, preparos.length),
+        h('div', { class: 'v2-stat-label' }, 'preparos')
+      ),
+      h('div', { class: 'v2-stat-card v2-stat-warn' },
+        h('div', { class: 'v2-stat-num' }, compras.length),
+        h('div', { class: 'v2-stat-label' }, 'compras pendentes')
+      )
+    ),
+
+    // Preparos
+    h('div', { class: 'v2-section-label' }, 'O que produzir hoje'),
+    preparos.length
+      ? h('div', { class: 'v2-prod-grid' },
+          ...preparos.map(p =>
+            h('div', { class: 'v2-prod-card' },
+              h('div', { class: 'v2-prod-qtd' }, fmtQtd(p.aProduzir, p.unidade)),
+              h('div', { class: 'v2-prod-nome' }, p.nome),
+              p.lotes > 0
+                ? h('div', { class: 'v2-prod-lote' }, `${nf1.format(p.lotes)} lote${p.lotes !== 1 ? 's' : ''} · ${fmtQtd(p.rendimentoLote, p.unidade)} cada`)
+                : null
+            )
+          )
+        )
+      : h('div', { class: 'v2-empty' }, 'Nenhum preparo necessário.'),
+
+    // Compras
+    compras.length
+      ? h('div', {},
+          h('div', { class: 'v2-section-label', style: 'margin-top:28px' }, 'Compras a fazer antes de produzir'),
+          h('div', { class: 'v2-prod-grid' },
+            ...compras.map(c =>
+              h('div', { class: 'v2-prod-card v2-prod-card-compra' },
+                h('div', { class: 'v2-prod-qtd' }, `${nf1.format(c.compra.sugerido)} ${c.compra.un}`),
+                h('div', { class: 'v2-prod-nome' }, c.nome)
               )
             )
           )
         )
-      : null;
-
-    reset(corpo, cabecalho, secFinalizacao, secProducao, secCompras);
-  } catch (e) {
-    reset(corpo, h('div', { class: 'alert' }, `Não foi possível carregar: ${e.message}`));
-  }
+      : null
+  );
 }
 
 // ── Navegação ─────────────────────────────────────────────────────────────

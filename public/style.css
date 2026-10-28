@@ -173,22 +173,75 @@ details > summary:focus-visible { outline: 3px solid var(--pink); outline-offset
 
 .op-vazio { color: var(--muted); padding: 24px 0; font-size: 15px; }
 
-/* Finalização — cards com campo de disponibilidade */
-.op-fin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.op-fin-card { background: var(--card); border: 2px solid var(--ink); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.op-fin-nome { font: 700 17px var(--serif); }
-.op-fin-row  { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.op-fin-col  { display: flex; flex-direction: column; gap: 4px; }
-.op-fin-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.op-fin-meta { font: 400 36px/1 var(--head); }
-.op-fin-input { font: 700 28px/1 var(--head) !important; text-align: center; border-radius: 12px; padding: 8px 10px; min-height: 0; height: auto; width: 100%; }
-.op-fin-badge { min-height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; background: var(--line); color: var(--muted); }
-.op-fin-badge.op-tile-ok    { background: var(--ok-bg); color: var(--ok); }
-.op-fin-badge.op-tile-falta { background: var(--bad-bg); color: var(--bad); }
+/* ── Painel Operacional v2 ───────────────────────────────────────────────── */
 
-@media (max-width: 560px) {
-  .op-fin-grid { grid-template-columns: 1fr; }
-  .op-fin-meta { font-size: 28px; }
+/* Tela de seleção */
+.v2-hero { padding: 8px 0 32px; }
+.v2-data  { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.v2-titulo { font: 400 32px/1.1 var(--head); margin-bottom: 6px; }
+.v2-sub   { font-size: 14px; color: var(--muted); margin-bottom: 28px; }
+.v2-equipes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.v2-equipe  { border: 2px solid var(--ink); border-radius: 22px; padding: 28px 16px 24px; cursor: pointer; background: var(--card); display: flex; flex-direction: column; align-items: center; gap: 10px; transition: transform .1s; }
+.v2-equipe:active { transform: scale(.97); }
+.v2-equipe-fin  { background: var(--pink); color: #1f4d3f; border-color: #1f4d3f; }
+.v2-equipe-prod { background: var(--green); color: var(--cream); border-color: var(--green); }
+.v2-eq-icon  { font-size: 40px; line-height: 1; }
+.v2-eq-titulo { font: 400 22px var(--head); }
+.v2-eq-desc  { font-size: 13px; opacity: .8; text-align: center; }
+
+/* Cabeçalho dos painéis */
+.v2-painel-header { display: flex; flex-direction: column; gap: 4px; margin-bottom: 22px; }
+.v2-voltar  { align-self: flex-start; background: transparent; border: none; font-size: 14px; color: var(--muted); cursor: pointer; padding: 0; margin-bottom: 4px; }
+.v2-painel-titulo { font: 400 28px var(--head); }
+.v2-painel-ref  { font-size: 12px; color: var(--muted); }
+.v2-loading { color: var(--muted); padding: 32px 0; }
+
+/* Stat solo (Finalização) */
+.v2-stat-solo { background: var(--pink); color: #1f4d3f; border: 2px solid var(--ink); border-radius: 18px; padding: 18px 20px; margin-bottom: 24px; }
+.v2-stat-solo .v2-stat-num { font: 400 52px/1 var(--head); }
+.v2-stat-solo .v2-stat-label { font-size: 13px; margin-top: 4px; opacity: .85; }
+
+/* Stats row (Produção) */
+.v2-stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+.v2-stat-card { border: 2px solid var(--ink); border-radius: 18px; padding: 16px; text-align: center; }
+.v2-stat-green { background: var(--green); color: var(--cream); }
+.v2-stat-warn  { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+.v2-stat-num   { font: 400 44px/1 var(--head); }
+.v2-stat-label { font-size: 12px; margin-top: 4px; opacity: .85; }
+
+/* Seção label */
+.v2-section-label { font: 400 14px var(--head); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
+.v2-cat-label     { font: 400 13px var(--head); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 20px 0 8px; }
+.v2-empty { color: var(--muted); font-size: 15px; padding: 8px 0 24px; }
+
+/* Cards Finalização */
+.v2-cards { display: flex; flex-direction: column; gap: 12px; }
+.v2-fin-card { background: var(--card); border: 2px solid var(--ink); border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.v2-fin-nome { font: 700 19px var(--serif); }
+.v2-fin-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.v2-fin-bloco { display: flex; flex-direction: column; gap: 4px; }
+.v2-bloco-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.v2-bloco-num { font: 400 48px/1 var(--head); }
+.v2-bloco-un  { font-size: 12px; color: var(--muted); }
+.v2-disp-input { font: 700 40px/1 var(--head) !important; text-align: center; padding: 6px 8px; min-height: 0; height: auto; border-radius: 12px; }
+.v2-badge { border-radius: 12px; padding: 10px 14px; font-size: 13px; font-weight: 700; text-align: center; background: var(--line); color: var(--muted); }
+.v2-badge-ok    { background: var(--ok-bg); color: var(--ok); }
+.v2-badge-falta { background: var(--bad-bg); color: var(--bad); }
+
+/* Grid Produção */
+.v2-prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.v2-prod-card { background: var(--card); border: 2px solid var(--green); border-radius: 18px; padding: 16px 14px; }
+.v2-prod-card-compra { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+.v2-prod-qtd  { font: 400 30px/1 var(--head); margin-bottom: 6px; }
+.v2-prod-nome { font-size: 14px; line-height: 1.3; }
+.v2-prod-lote { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+.v2-prod-card-compra .v2-prod-lote { color: inherit; opacity: .7; }
+
+@media (max-width: 480px) {
+  .v2-equipes { grid-template-columns: 1fr; }
+  .v2-bloco-num { font-size: 36px; }
+  .v2-disp-input { font-size: 32px !important; }
+  .v2-prod-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 }
 
 @media (max-width: 560px) {
