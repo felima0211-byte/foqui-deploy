@@ -144,3 +144,33 @@ details > summary:focus-visible { outline: 3px solid var(--pink); outline-offset
 .grupo-compra { font: 400 15px var(--head); margin: 16px 0 2px; color: var(--muted); }
 .row span.small { white-space: nowrap; }
 @media (max-width: 760px) { .w-med { flex-basis: 120px; width: 120px; } }
+
+/* ── Telas Operacionais ──────────────────────────────────────────────────── */
+.op-progresso-wrap { background: var(--card); border: 2px solid var(--ink); border-radius: 18px; padding: 16px 18px; margin-bottom: 20px; }
+.op-progresso-topo { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: 14px; color: var(--muted); }
+.op-pct { font: 400 28px var(--head); color: var(--ink); }
+.op-barra { height: 14px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.op-barra-fill { height: 100%; background: var(--ink); border-radius: 99px; transition: width 0.3s ease; }
+
+.op-cat { font: 400 15px var(--head); color: var(--muted); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+
+.op-card { border: 2px solid var(--ink); border-radius: 18px; margin-bottom: 10px; background: var(--card); transition: opacity 0.15s; }
+.op-card.op-done { opacity: 0.45; }
+.op-card-inner { display: flex; align-items: center; gap: 16px; padding: 16px 18px; cursor: pointer; }
+.op-card-info { flex: 1; min-width: 0; }
+.op-card-nome { font: 700 20px var(--serif); margin-bottom: 2px; }
+.op-card.op-done .op-card-nome { text-decoration: line-through; color: var(--muted); }
+.op-card-sub { font-size: 13.5px; color: var(--muted); margin-top: 3px; }
+.op-card-qtd { display: flex; align-items: baseline; gap: 5px; margin-top: 6px; }
+.op-num { font: 400 36px/1 var(--head); color: var(--ink); }
+.op-un { font-size: 15px; color: var(--muted); }
+.op-check { width: 32px; height: 32px; min-height: 0; flex: none; accent-color: var(--green); cursor: pointer; }
+
+.op-vazio { color: var(--muted); padding: 32px 0; text-align: center; font-size: 16px; }
+
+@media (max-width: 560px) {
+  .op-card-nome { font-size: 17px; }
+  .op-num { font-size: 28px; }
+  .op-card-inner { padding: 14px; gap: 12px; }
+  .sections button { font-size: 14px; padding: 10px 8px; }
+}
