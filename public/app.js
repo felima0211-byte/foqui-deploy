@@ -633,11 +633,15 @@ async function viewOperacional(alvo) {
     );
 
     // ── Seção: Finalização ──
+    const hoje = new Date().toISOString().slice(0, 10);
+    const chaveDisp = `foqui-disp-${hoje}`;
+    let disp = {};
+    try { disp = JSON.parse(localStorage.getItem(chaveDisp) || '{}'); } catch { disp = {}; }
+
     const lanchesPorCat = porCategoria(
       [...metaMap.entries()]
         .filter(([, v]) => v > 0)
         .map(([id, meta]) => {
-          const l = plano.metas ? null : null; // busca no vendas.linhas
           const linha = vendas.linhas.find(x => x.lanche_id === id);
           return { id, nome: linha?.nome ?? `#${id}`, categoria: linha?.categoria ?? 'Outros', meta };
         })
@@ -645,18 +649,51 @@ async function viewOperacional(alvo) {
       x => x.categoria
     );
 
+    function statusTile(tem, precisa) {
+      if (tem === '' || tem === null || isNaN(tem)) return { cls: '', txt: '' };
+      const diff = tem - precisa;
+      if (diff >= 0) return { cls: 'op-tile-ok', txt: `+${diff} a mais` };
+      return { cls: 'op-tile-falta', txt: `faltam ${Math.abs(diff)}` };
+    }
+
     const secFinalizacao = h('section', { class: 'op-section' },
       h('div', { class: 'op-section-title' }, 'Finalização'),
-      h('div', { class: 'op-section-sub' }, 'Quantos lanches produzir hoje'),
-      h('div', { class: 'op-grid' },
+      h('div', { class: 'op-section-sub' }, 'Média diária do último relatório de vendas · informe quantos você tem disponíveis'),
+      h('div', { class: 'op-fin-grid' },
         ...lanchesPorCat.flatMap(([cat, lista]) => [
           h('div', { class: 'op-grid-cat' }, cat),
-          ...lista.map(l =>
-            h('div', { class: 'op-tile' },
-              h('div', { class: 'op-tile-num' }, l.meta),
-              h('div', { class: 'op-tile-nome' }, l.nome)
-            )
-          )
+          ...lista.map(l => {
+            const temVal = disp[l.id] ?? '';
+            const { cls, txt } = statusTile(temVal === '' ? NaN : Number(temVal), l.meta);
+            const badge = h('div', { class: `op-fin-badge${cls ? ' ' + cls : ''}` }, txt);
+            const inputTem = h('input', {
+              type: 'number', min: '0', placeholder: '0',
+              value: temVal === '' ? '' : temVal,
+              class: 'op-fin-input',
+              oninput(e) {
+                const v = e.target.value === '' ? '' : Number(e.target.value);
+                disp[l.id] = v;
+                try { localStorage.setItem(chaveDisp, JSON.stringify(disp)); } catch { /* ignora */ }
+                const { cls: c2, txt: t2 } = statusTile(v === '' ? NaN : Number(v), l.meta);
+                badge.textContent = t2;
+                badge.className = `op-fin-badge${c2 ? ' ' + c2 : ''}`;
+              }
+            });
+            return h('div', { class: 'op-fin-card' },
+              h('div', { class: 'op-fin-nome' }, l.nome),
+              h('div', { class: 'op-fin-row' },
+                h('div', { class: 'op-fin-col' },
+                  h('div', { class: 'op-fin-label' }, 'Precisa hoje'),
+                  h('div', { class: 'op-fin-meta' }, l.meta)
+                ),
+                h('div', { class: 'op-fin-col' },
+                  h('div', { class: 'op-fin-label' }, 'Tem disponível'),
+                  inputTem
+                )
+              ),
+              badge
+            );
+          })
         ])
       )
     );
